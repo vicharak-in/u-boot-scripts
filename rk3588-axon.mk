@@ -15,4 +15,6 @@ DEVICE_ARCH="arm64"
 # Build options
 
 # Build debian package
-DEB_BUILD=false
+DEB_BUILD=true
+
+export BOARD=rk3588-axon

@@ -16,3 +16,4 @@ DEVICE_ARCH="arm64"
 
 # Build debian package
 DEB_BUILD=true
+export BOARD=rk3399-vaaman
