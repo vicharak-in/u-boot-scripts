@@ -21,27 +21,23 @@ function check_image_build() {
 }
 
 function source_toolchain {
-    if [ "$(uname -m)" != "aarch64" ]; then
-        case "${DEVICE_ARCH}" in
-            arm64)
-                command -v aarch64-linux-gnu-gcc >/dev/null 2>&1 \
-                    || exit_with_error "aarch64-linux-gnu-gcc not found!"
-                uboot_args="ARCH=arm CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc --all)"
-                ;;
-            arm)
-                command -v arm-linux-gnueabi-gcc >/dev/null 2>&1 \
-                    || exit_with_error "arm-linux-gnueabi-gcc not found!"
-                uboot_args="ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- -j$(nproc --all)"
-                ;;
-            *)
-                exit_with_error "Unsupported DEVICE_ARCH: ${DEVICE_ARCH}"
-                ;;
-        esac
-    else
-        uboot_args="ARCH=arm -j$(nproc --all)"
-    fi
+	if [ "$(uname -m)" != "aarch64" ]; then
+		if ! command -v arm-linux-gnueabi-gcc >/dev/null 2>&1; then
+			exit_with_error "arm-linux-gnueabi-gcc not found!"
+		fi
+		if ! command -v aarch64-linux-gnu-gcc >/dev/null 2>&1; then
+			exit_with_error "aarch64-linux-gnu-gcc not found!"
+		fi
 
-    export uboot_args
+		uboot_args="ARCH=arm \
+			CROSS_COMPILE=aarch64-linux-gnu- \
+			-j$(nproc --all)"
+	else
+		uboot_args="ARCH=arm \
+			-j$(nproc --all)"
+	fi
+
+	export uboot_args
 }
 
 function cleanup() {
@@ -63,7 +59,13 @@ function build_config() {
 }
 
 function build_uboot_deb_package() {
-	dpkg-buildpackage -b -rfakeroot -us -uc -a "${DEVICE_ARCH}"
+	if ! is_set "${DEVICE_NAME}"; then
+		exit_with_error "Device not selected! Run './vicharak/build.sh lunch' first."
+	fi
+
+	# debian/rules defaults BOARD to rk3399-vaaman; pass the lunched device.
+	BOARD="${DEVICE_NAME}" \
+		dpkg-buildpackage -b -rfakeroot -us -uc -a "${DEVICE_ARCH}"
 
 	deb_files=$(find "${UBOOT_DIR}/.." -maxdepth 1 -name "u-boot-${DEVICE_NAME}*")
 
@@ -77,35 +79,17 @@ function build_uboot_deb_package() {
 }
 
 function build_ubootdeb() {
+	check_lunch_device
 	source_toolchain
 	build_config
 	build_uboot_deb_package
-}
-
-function make_bl31() {
-	if [ ! -d "${UBOOT_DIR}/trusted-firmware-a" ]; then
-		git clone --depth=1 https://git.trustedfirmware.org/TF-A/trusted-firmware-a.git/
-	fi
-
-	cd "${UBOOT_DIR}/trusted-firmware-a" || exit
-
-	make realclean -j$(nproc --all)
-	make CROSS_COMPILE=aarch64-linux-gnu- PLAT=rk3399 -j$(nproc --all)
-
-	cd "${UBOOT_DIR}" || exit
 }
 
 function build_uboot() {
 	source_toolchain
 	build_config
 
-	if ! is_enabled "${MAINLINE_BUILD}"; then
-		./make.sh "${DEVICE_NAME}"
-	else
-		make_bl31
-		# shellcheck disable=SC2086
-		BL31=${UBOOT_DIR}/trusted-firmware-a/build/rk3399/release/bl31/bl31.elf make ${uboot_args} all
-	fi
+	./make.sh "${DEVICE_NAME}"
 
 	if is_enabled "${DEB_BUILD}"; then
 		build_uboot_deb_package
@@ -157,12 +141,6 @@ function print_info() {
 		print "Build Debian package: No"
 	fi
 
-	if is_enabled "${MAINLINE_BUILD}"; then
-		print "Build Mainline U-Boot: Yes"
-	else
-		print "Build Mainline U-Boot: No"
-	fi
-
 	usage
 }
 
@@ -182,6 +160,9 @@ function set_device_config() {
 function check_lunch_device() {
 	if [[ ! -f "${SCRIPT_DIR}/.device.mk" ]]; then
 		lunch_device
+	else
+		# shellcheck disable=SC1090
+		source "${SCRIPT_DIR}/.device.mk"
 	fi
 }
 
