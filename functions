@@ -63,7 +63,13 @@ function build_config() {
 }
 
 function build_uboot_deb_package() {
-	dpkg-buildpackage -b -rfakeroot -us -uc -a "${DEVICE_ARCH}"
+	if ! is_set "${DEVICE_NAME}"; then
+		exit_with_error "Device not selected! Run './vicharak/build.sh lunch' first."
+	fi
+
+	# debian/rules defaults BOARD to rk3399-vaaman; pass the lunched device.
+	BOARD="${DEVICE_NAME}" \
+		dpkg-buildpackage -b -rfakeroot -us -uc -a "${DEVICE_ARCH}"
 
 	deb_files=$(find "${UBOOT_DIR}/.." -maxdepth 1 -name "u-boot-${DEVICE_NAME}*")
 
@@ -77,6 +83,7 @@ function build_uboot_deb_package() {
 }
 
 function build_ubootdeb() {
+	check_lunch_device
 	source_toolchain
 	build_config
 	build_uboot_deb_package
@@ -182,6 +189,9 @@ function set_device_config() {
 function check_lunch_device() {
 	if [[ ! -f "${SCRIPT_DIR}/.device.mk" ]]; then
 		lunch_device
+	else
+		# shellcheck disable=SC1090
+		source "${SCRIPT_DIR}/.device.mk"
 	fi
 }
 
