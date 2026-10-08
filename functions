@@ -85,7 +85,6 @@ function build_uboot_deb_package() {
 function build_ubootdeb() {
 	check_lunch_device
 	source_toolchain
-	build_config
 	build_uboot_deb_package
 }
 
